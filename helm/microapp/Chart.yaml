@@ -1,0 +1,5 @@
+apiVersion: v2
+name: microapp
+description: A Helm chart for deploying Node, Python, and Go services
+version: 0.1.0
+appVersion: "1.0"
