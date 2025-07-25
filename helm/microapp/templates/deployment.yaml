@@ -29,6 +29,11 @@ spec:
                 secretKeyRef:
                   name: microapp-secrets
                   key: JWT_SECRET
+            - name: MONGO_URI
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-uri-secret
+                  key: MONGO_URI
           livenessProbe:
             httpGet:
               path: /health
