@@ -37,6 +37,7 @@ jobs:
         curl -sSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 
     - name: 🚀 Deploy with Helm
+      if: false
       run: |
         export KUBECONFIG=$PWD/kubeconfig
         helm upgrade --install microapp ./helm/microapp --atomic --timeout 2m
