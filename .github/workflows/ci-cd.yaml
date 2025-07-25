@@ -22,8 +22,8 @@ jobs:
 
     - name: 🐳 Build & Push Python
       run: |
-        docker build -t mourphy/python-service:v2./microservices/python-service
-        docker push murphy/python-service:v2
+        docker build -t mourphy/python-service:v2 ./microservices/python-service
+        docker push mourphy/python-service:v2
 
     - name: 🐳 Build & Push Go
       run: |
