@@ -1,142 +1,181 @@
 package main
 
 import (
-    "context"
-    "fmt"
-    "html/template"
-    "log"
-    "net/http"
-    "os"
-    "time"
+	"context"
+	"fmt"
+	"html/template"
+	"log"
+	"net/http"
+	"os"
+	"time"
 
-    "go.mongodb.org/mongo-driver/bson"
-    "go.mongodb.org/mongo-driver/mongo"
-    "go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-var client *mongo.Client
+var collection *mongo.Collection
+var mongoStatus string
 
-func healthHandler(w http.ResponseWriter, r *http.Request) {
-    fmt.Fprintf(w, "✅ Go service healthy")
+func connectMongo() {
+	mongoURI := os.Getenv("MONGO_URI")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(mongoURI))
+	if err != nil {
+		mongoStatus = "❌ MongoDB connection failed"
+		log.Println(err)
+		return
+	}
+
+	err = client.Ping(ctx, nil)
+	if err != nil {
+		mongoStatus = "❌ MongoDB ping failed"
+		log.Println(err)
+		return
+	}
+
+	collection = client.Database("myappdb").Collection("users")
+	mongoStatus = "✅ MongoDB connected"
 }
 
 func homeHandler(w http.ResponseWriter, r *http.Request) {
-    ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-    defer cancel()
+	userCount := 0
+	if collection != nil {
+		count, err := collection.CountDocuments(context.TODO(), bson.D{})
+		if err == nil {
+			userCount = int(count)
+		}
+	}
 
-    mongoStatus := "❌ MongoDB not connected"
-    count := int64(-1)
+	tmpl := `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Go Service – Hamza</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                background: linear-gradient(135deg, #667eea, #764ba2);
+                color: white;
+                text-align: center;
+                padding: 50px;
+            }
+            input, button {
+                padding: 10px;
+                border-radius: 5px;
+                border: none;
+                margin: 5px;
+            }
+            button {
+                background: white;
+                color: #764ba2;
+                font-weight: bold;
+                cursor: pointer;
+            }
+            a {
+                color: #ffffff;
+                font-weight: bold;
+                text-decoration: underline;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>👋 Welcome to Go Service at <code>go.hamza.local</code></h1>
+        <p>{{.MongoStatus}}</p>
+        <p>📄 Total Subscribers: {{.UserCount}}</p>
 
-    if err := client.Ping(ctx, nil); err == nil {
-        mongoStatus = "✅ MongoDB connected"
+        <form action="/register" method="POST">
+            <input name="name" placeholder="Enter Your Name" required />
+            <input name="email" type="email" placeholder="Enter Your Email" required />
+            <button type="submit">Subscribe</button>
+        </form>
 
-        collection := client.Database("myappdb").Collection("test_collection")
-        cnt, err := collection.CountDocuments(ctx, bson.D{})
-        if err != nil {
-            log.Printf("Failed to count documents: %v", err)
-        } else {
-            count = cnt
-        }
-    }
-
-    data := struct {
-        Title          string
-        MongoStatus    string
-        WelcomeMessage string
-        DocCount       int64
-    }{
-        Title:          "Go Service - Welcome",
-        MongoStatus:    mongoStatus,
-        WelcomeMessage: "👋 Hello from the Go Service at go.hamza.local!",
-        DocCount:       count,
-    }
-
-    tmpl := template.Must(template.New("home").Parse(htmlPageWithCount))
-    if err := tmpl.Execute(w, data); err != nil {
-        http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-    }
+        <br>
+        <a href="/users">🔍 View all users</a>
+    </body>
+    </html>
+    `
+	tmplParsed := template.Must(template.New("home").Parse(tmpl))
+	tmplParsed.Execute(w, map[string]interface{}{
+		"MongoStatus": mongoStatus,
+		"UserCount":   userCount,
+	})
 }
 
-const htmlPageWithCount = `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>{{.Title}}</title>
-<style>
-  body {
-    height: 100vh;
-    margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
-      Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    background: linear-gradient(135deg, #4b6cb7, #182848);
-    color: #ffffff;
-    text-align: center;
-  }
-  h1 {
-    font-size: 3rem;
-    margin-bottom: 0.5rem;
-  }
-  p {
-    font-size: 1.5rem;
-    margin-top: 0;
-  }
-  .status {
-    margin-top: 1.5rem;
-    font-weight: bold;
-    font-size: 1.25rem;
-    color: #90ee90;
-  }
-  .count {
-    margin-top: 1rem;
-    font-size: 1.1rem;
-    font-style: italic;
-  }
-</style>
-</head>
-<body>
-  <h1>{{.WelcomeMessage}}</h1>
-  <p>Powered by Go & MongoDB</p>
-  <div class="status">{{.MongoStatus}}</div>
-  {{if ge .DocCount 0}}
-  <div class="count">Documents in <code>test_collection</code>: {{.DocCount}}</div>
-  {{else}}
-  <div class="count">Unable to fetch document count.</div>
-  {{end}}
-</body>
-</html>
-`
+func registerHandler(w http.ResponseWriter, r *http.Request) {
+	if collection == nil {
+		http.Error(w, "DB error", http.StatusInternalServerError)
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "Invalid form", http.StatusBadRequest)
+		return
+	}
+
+	name := r.FormValue("name")
+	email := r.FormValue("email")
+
+	_, err := collection.InsertOne(context.TODO(), bson.M{
+		"name":   name,
+		"email":  email,
+		"source": "go-service",
+	})
+
+	if err != nil {
+		http.Error(w, "Insert failed", http.StatusInternalServerError)
+		return
+	}
+
+	http.Redirect(w, r, "/success?name="+name, http.StatusFound)
+}
+
+func successHandler(w http.ResponseWriter, r *http.Request) {
+	name := r.URL.Query().Get("name")
+	fmt.Fprintf(w, `<h2>✅ Thank you, <b>%s</b>! You're subscribed!</h2><a href="/">⬅️ Back</a>`, name)
+}
+
+func usersHandler(w http.ResponseWriter, r *http.Request) {
+	if collection == nil {
+		http.Error(w, "DB not connected", http.StatusInternalServerError)
+		return
+	}
+
+	cursor, err := collection.Find(context.TODO(), bson.D{})
+	if err != nil {
+		http.Error(w, "Query failed", http.StatusInternalServerError)
+		return
+	}
+	defer cursor.Close(context.TODO())
+
+	var users []bson.M
+	if err := cursor.All(context.TODO(), &users); err != nil {
+		http.Error(w, "Decode failed", http.StatusInternalServerError)
+		return
+	}
+
+	fmt.Fprintf(w, "<h2>📄 All Subscribers</h2><ul>")
+	for _, user := range users {
+		fmt.Fprintf(w, "<li><b>%s</b> – %s</li>", user["name"], user["email"])
+	}
+	fmt.Fprint(w, "</ul><br><a href='/'>⬅️ Back</a>")
+}
+
+func healthHandler(w http.ResponseWriter, r *http.Request) {
+	w.Write([]byte("✅ Go service healthy"))
+}
 
 func main() {
-    mongoURI := os.Getenv("MONGO_URI")
-    if mongoURI == "" {
-        log.Fatal("MONGO_URI environment variable not set")
-    }
+	connectMongo()
 
-    ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-    defer cancel()
+	http.HandleFunc("/", homeHandler)
+	http.HandleFunc("/register", registerHandler)
+	http.HandleFunc("/success", successHandler)
+	http.HandleFunc("/users", usersHandler)
+	http.HandleFunc("/health", healthHandler)
 
-    var err error
-    clientOpts := options.Client().ApplyURI(mongoURI)
-    client, err = mongo.Connect(ctx, clientOpts)
-    if err != nil {
-        log.Fatalf("Failed to connect to MongoDB: %v", err)
-    }
-
-    if err = client.Ping(ctx, nil); err != nil {
-        log.Fatalf("Failed to ping MongoDB: %v", err)
-    }
-
-    log.Println("Connected to MongoDB successfully!")
-
-    http.HandleFunc("/", homeHandler)
-    http.HandleFunc("/health", healthHandler)
-
-    fmt.Println("Go service running on port 3002")
-    log.Fatal(http.ListenAndServe(":3002", nil))
+	fmt.Println("Go service running on port 3002")
+	http.ListenAndServe(":3002", nil)
 }

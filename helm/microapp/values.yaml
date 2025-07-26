@@ -1,6 +1,6 @@
 services:
   - name: node-service
-    image: mourphy/node-service:v1
+    image: mourphy/node-service:v3
     port: 3000
     replicas: 1
     env:
@@ -8,7 +8,7 @@ services:
         value: production
 
   - name: python-service
-    image: mourphy/python-service:v1
+    image: mourphy/python-service:v3
     port: 3001
     replicas: 1
     env:
@@ -16,11 +16,16 @@ services:
         value: production
 
   - name: go-service
-    image: mourphy/go-service:v3
+    image: mourphy/go-service:v4
     port: 3002
     replicas: 1
     env:
       - name: GO_ENV
         value: production
+  - name: dashboard-service
+    image: mourphy/dashboard-service:v1
+    port: 3003
+    replicas: 1
+    env: []
 globalSecrets:
   jwtSecret: Hamza@987987
