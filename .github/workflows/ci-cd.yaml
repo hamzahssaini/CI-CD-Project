@@ -27,8 +27,8 @@ jobs:
 
     - name: 🐳 Build & Push Go
       run: |
-        docker build -t mourphy/go-service:v2 ./microservices/go-service
-        docker push mourphy/go-service:v2
+        docker build -t mourphy/go-service:v3 ./microservices/go-service
+        docker push mourphy/go-service:v3
 
     - name: ⚙️ Setup kubectl & Helm
       run: |
