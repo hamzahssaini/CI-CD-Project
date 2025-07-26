@@ -16,9 +16,9 @@ services:
         value: production
 
   - name: go-service
-    image: mourphy/go-service:v1
+    image: mourphy/go-service:v3
     port: 3002
-    replicas: 2
+    replicas: 1
     env:
       - name: GO_ENV
         value: production
